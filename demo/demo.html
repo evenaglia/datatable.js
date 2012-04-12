@@ -1,0 +1,184 @@
+<!--
+  ~ Copyright 2010 - 2012 Ed Venaglia
+  ~
+  ~    Licensed under the Apache License, Version 2.0 (the "License");
+  ~    you may not use this file except in compliance with the License.
+  ~    You may obtain a copy of the License at
+  ~
+  ~        http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~    Unless required by applicable law or agreed to in writing, software
+  ~    distributed under the License is distributed on an "AS IS" BASIS,
+  ~    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~    See the License for the specific language governing permissions and
+  ~    limitations under the License.
+  -->
+<html>
+<head>
+    <title>Data table demo page</title>
+    <style type="text/css">
+        BODY, P, TD { font-family: Arial, sans-serif; font-size: 12px; }
+    </style>
+	<script type="text/javascript" src="jquery.js"></script>
+	<script type="text/javascript" src="../datatable.js"></script>
+	<script type="text/javascript" src="sampledata.js"></script>
+	<script type="text/javascript">
+		var $j = jQuery.noConflict();
+
+		var dataTable = new DataTable(["id","name","abbr","inducted","population","capital","region"]);
+
+		dataTable.insert(sampleData);
+		dataTable.index(["population"]);
+		dataTable.index(["region","population"]);
+		dataTable.index(["id"]);
+
+		function print(text) {
+			document.write(text);
+		}
+
+		function formatInputs(operator) {
+			var input1 = operator.siblings(".value1");
+			var input2 = operator.siblings(".value2");
+			switch(operator.val()) {
+				case "in":      input1.attr("size", 48); input2.hide(); break;
+				case "between": input1.attr("size", 12); input2.show(); break;
+				default:        input1.attr("size", 12); input2.hide(); break;
+			}
+		}
+
+		function cloneInputs() {
+			for (var i = 2; i <= 3; i++)
+				$j(".crit1").clone().removeClass("crit1").addClass("crit" + i).insertAfter(".crit" + (i - 1));
+			for (var j = 1; j <= 3; j++) formatInputs($j(".crit" + j + " .operator"));
+		}
+
+		function execute(showResults) {
+            indexDetail();
+			var logBuffer = [];
+			var wrapper = {
+				buffer: dataTable,
+				and: function() {
+					this.buffer = this.buffer.findWhere.apply(this.buffer, arguments);
+					this.and = function() { this.buffer.and.apply(this.buffer, arguments); };
+				},
+				getRows: function() {
+					logBuffer.length = 0;
+					try {
+                        var _v = dataTable.verbose();
+                        var _l = DataTable.logger();
+                        dataTable.verbose(true);
+						if (!showResults) DataTable.logger(function(m) { logBuffer.push(m); });
+						return this.buffer.getRows();
+					} finally {
+						DataTable.logger(_l);
+						dataTable.verbose(_v);
+					}
+				}
+			};
+			for (var i = 1; i <= 3; i++) {
+				var critLine = $j(".crit" + i);
+				if (!critLine.find(".column").val()) continue;
+				var val;
+				switch(critLine.find(".operator").val()) {
+					case "in": val = critLine.find(".value1").val().split(",")/*.invoke("strip")*/; break;
+					case "between": val = new DataTable.Range(critLine.find(".value1").val(), critLine.find(".value2").val()); break;
+					default: val = critLine.find(".value1").val();
+				}
+				wrapper.and(critLine.find(".column").val(), critLine.find(".operator").val(), val);
+			}
+			var formatter = dataTable.index(["id"]);
+			var rows = wrapper.getRows();
+			if (showResults)
+				$j("#results").empty().append(formatter.toHtml(null, formatter.buildIndex(rows)));
+			else
+				$j("#results").empty().text(logBuffer.join("\n"));
+		}
+
+		function indexDetail(index, selector, dataset) {
+            $j("TABLE.idx").remove();
+            if (arguments.length == 0) return;
+			var detail = index.toHtml(function() { return false; }, dataset && index.buildIndex(dataset));
+			$j(".indexDetail").empty();
+			$j(selector).append(detail);
+		}
+
+		var indexSeq = 0;
+		function addIndexViewers(varName, table) {
+			table.index().forEach(function(ix) {
+				ix = ix.toJSON().replace(/"/g,"'");
+				var buffer = [];
+				var id = "indexOutput" + (indexSeq++);
+				buffer.push("\t<div>");
+				buffer.push(  "<a href=\"javascript:indexDetail($vn.index($ix), '#$id')\">");
+				buffer.push(    "Index data for ");
+				buffer.push(    "<strong>");
+				buffer.push(    "$ix");
+				buffer.push(    "</strong>");
+				buffer.push(  "</a>");
+				buffer.push(  ": ");
+				buffer.push(  "<div class=\"indexOutput\" id=\"$id\"></div>");
+				buffer.push("</div>\n");
+				document.write(buffer.join("").replace(/\$id/g, id).replace(/\$ix/g, ix).replace(/\$vn/g, varName));
+			});
+		}
+
+		var exampleCriteria = [
+			{ column: "region", operator: "in", value1: "Northeast,West" },
+			{ column: "population", operator: "between", value1: "3500000", value2: "10000000" },
+			{ column: "capital", operator: ">", value1: "S" }
+		];
+
+		function setCriteria(criteria) {
+			for (var i = 1; i <= 3; i++) {
+				var critLine = $j(".crit" + i);
+				var crit = criteria[i - 1] || {};
+				critLine.find(".column").val(crit.column || "");
+				critLine.find(".value1").val(crit.value1 || "");
+				critLine.find(".value2").val(crit.value2 || "");
+				formatInputs(critLine.find(".operator").val(crit.operator || "=="));
+			}
+		};
+	</script>
+</head>
+<body>
+	<h2>U.S. States</h2>
+	<div>Rows in table: <script type="text/javascript">print(dataTable.getRows().length);</script></div>
+
+	<br/>
+	<strong>Criteria:</strong>
+	<div class="crit1">
+		<select class="column">
+			<option value="">--</option>
+			<option value="id">id</option>
+			<option value="name">name</option>
+			<option value="abbr">abbr</option>
+			<option value="population">population</option>
+			<option value="capital">capital</option>
+			<option value="region">region</option>
+		</select>
+		<select class="operator" onclick="formatInputs($j(this));">
+			<option value="==">==</option>
+			<option value="!=">!=</option>
+			<option value="&lt;">&lt;</option>
+			<option value="&lt;=">&lt;=</option>
+			<option value="&gt;=">&gt;=</option>
+			<option value="&gt;">&gt;</option>
+			<option value="in">in</option>
+			<option value="between">&gt;&lt;</option>
+		</select>
+		<input class="value1" size="12"/>
+		<input class="value2" size="12"/>
+	</div>
+	<script type="text/javascript">cloneInputs();</script>
+	<button onclick="execute(true);">Execute...</button>
+	<button onclick="execute(false);">Analyze...</button>
+	<div id="results" style="white-space:pre; padding-top:6px;">&nbsp;</div>
+
+	<br/>
+	<strong>View indexes:</strong>
+	<div><a href="javascript:indexDetail();">Hide all index data</a></div>
+	<script type="text/javascript">addIndexViewers("dataTable", dataTable);</script>
+
+</body>
+<script type="text/javascript">setCriteria(exampleCriteria);</script>
+</html>
